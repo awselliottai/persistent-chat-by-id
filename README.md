@@ -161,6 +161,8 @@ This file defines the assistant's behavior. Modify the string to:
 * Restrict or expand the domain
 * Adjust formatting or voice
 
+Currently, the initial prompt is designed to simply explain this system and its underlying technology stack and features.
+
 No other files must be changed to alter chat behavior.
 
 ---
