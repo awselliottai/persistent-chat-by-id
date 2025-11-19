@@ -1,5 +1,3 @@
-// /app/page.tsx
-
 import { getChats, createChat } from '@/util/chat-store';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';

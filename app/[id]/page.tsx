@@ -1,5 +1,3 @@
-// /app/[id]/page.tsx
-
 import { loadChat } from '@/util/chat-store';
 import Chat from '@/ui/chat';
 import Link from 'next/link';

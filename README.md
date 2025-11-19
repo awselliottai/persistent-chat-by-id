@@ -8,7 +8,11 @@ A minimal Next.js application that lets you:
 - Re-open any session by its unique ID and continue chatting
 - Customize the system behavior through a single prompt file
 
-All chat state is stored locally in a `.chats/` folder at the project root, using simple JSON files.
+All chat state is stored locally in a `.chats/` folder at the project root, using simple JSON files. 
+
+
+
+This project functions as a sort of minimal buildout example based on the Vercel AI-SDK guidance docs found at https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence.
 
 ---
 

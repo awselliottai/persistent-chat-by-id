@@ -1,5 +1,3 @@
-// /util/chat-store.ts
-
 import { UIMessage } from 'ai';
 import { generateId } from 'ai';
 import { existsSync, mkdirSync } from 'fs';
