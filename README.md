@@ -8,7 +8,7 @@ A minimal, production-ready example showing how to:
 * Open any chat by its unique ID and continue the conversation
 * Control system behavior through a single customizable prompt file
 
-Chats are now persisted using **Neon**, giving durable storage across deployments and fully solving the limitations of serverless filesystem writes on Vercel.
+Chats are persisted using **Neon**, ensuring durable storage across deployments and eliminating the limitations of serverless filesystem writes on Vercel.
 
 This project follows the Vercel AI SDK patterns for message persistence:
 [https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence)
@@ -17,13 +17,13 @@ This project follows the Vercel AI SDK patterns for message persistence:
 
 ## Features
 
-* **Streaming AI responses** via the Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`).
-* **Persistent chat storage** using **Neon Postgres**, not local disk.
-* **Automatic titles** derived from the first user message.
-* **Session listing** on the home page.
-* **Per-chat routing** using `/[id]` paths.
-* **Configurable system behavior** through `lib/prompts/system-prompt.ts`.
-* **Dark-mode UI** styled with utility classes.
+* **Streaming AI responses** using the Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`)
+* **Persistent chat storage** in **Neon Postgres**
+* **Auto-generated titles** from the first user message
+* **Session list view** on the home page
+* **Per-chat routing** via `/[id]`
+* **Single-point system behavior configuration** in `lib/prompts/system-prompt.ts`
+* **Dark-mode UI**, minimal and clean
 
 ---
 
@@ -34,8 +34,8 @@ This project follows the Vercel AI SDK patterns for message persistence:
 * **Database:** Neon Postgres
 * **AI / Streaming:** Vercel AI SDK
 * **UI:** React + TypeScript
-* **Markdown Rendering:** `react-markdown`, `remark-gfm`, `react-syntax-highlighter`
-* **Styling:** Tailwind-style utility classes
+* **Rendering:** `react-markdown`, `remark-gfm`, `react-syntax-highlighter`
+* **Styling:** Tailwind-style utilities
 
 ---
 
@@ -43,8 +43,8 @@ This project follows the Vercel AI SDK patterns for message persistence:
 
 ### 1. Prerequisites
 
-* Node.js (LTS)
-* A Neon database (free tier is fine)
+* Node.js (LTS recommended)
+* A Neon database (free tier works perfectly)
 
 ### 2. Clone and install
 
@@ -66,12 +66,11 @@ OPENAI_API_KEY=sk-...
 DATABASE_URL=postgresql://<YOUR-NEON-STRING>
 ```
 
-> `DATABASE_URL` should match the connection string provided by Neon.
-> Without `OPENAI_API_KEY`, the chat API cannot generate responses.
+> Without `OPENAI_API_KEY`, the chat route cannot generate responses.
 
 ### 4. Create the database table
 
-Run this SQL in the Neon dashboard:
+Run in Neon:
 
 ```sql
 CREATE TABLE IF NOT EXISTS chats (
@@ -86,11 +85,9 @@ CREATE TABLE IF NOT EXISTS chats (
 
 ```bash
 npm run dev
-# or pnpm dev
-# or yarn dev
 ```
 
-Visit:
+Then visit:
 
 ```
 http://localhost:3000
@@ -102,14 +99,15 @@ http://localhost:3000
 
 ### Chat API — `/app/api/chat/route.ts`
 
-The backend endpoint:
+The backend:
 
-* Receives `{ messages, id }` from the AI SDK transport
-* Streams a response using `openai('gpt-4o-mini')`
-* Applies `systemPrompt` from `lib/prompts/system-prompt.ts`
-* On stream completion, saves the chat to Neon
+* Receives `{ messages, id }` from the client
+* Streams a response with `streamText`
+* Uses `openai('gpt-4o-mini')`
+* Applies `systemPrompt`
+* Saves the updated chat record to Neon when the stream finishes
 
-Core logic:
+Example:
 
 ```ts
 const result = streamText({
@@ -119,7 +117,7 @@ const result = streamText({
 });
 ```
 
-Messages are stored via:
+And the persistence call:
 
 ```ts
 saveChat({ chatId: id, messages });
@@ -135,15 +133,15 @@ Implemented in:
 /util/chat-store.ts
 ```
 
-Responsibilities:
+This module handles:
 
-* `createChat()` → generates a new unique chat ID
-* `saveChat()` → upserts messages into Neon
-* `loadChat(id)` → fetches stored history for that chat
-* `getChats()` → returns all chats, sorted by `last_modified`
-* Titles are extracted from the first user message and truncated to 40 characters
+* `createChat()` → generates a new chat ID
+* `saveChat()` → upserts the messages into Neon
+* `loadChat(id)` → retrieves full history for that chat
+* `getChats()` → fetches all chats sorted by newest first
+* Auto-title extraction from the first user message
 
-This storage replaces the previous `.chats` filesystem directory, which is not suitable for Vercel serverless environments.
+This replaces the former `.chats` directory approach and now works safely on Vercel’s serverless runtime.
 
 ---
 
@@ -155,15 +153,8 @@ Location:
 /lib/prompts/system-prompt.ts
 ```
 
-This file defines the assistant's behavior. Modify the string to:
-
-* Change personality
-* Restrict or expand the domain
-* Adjust formatting or voice
-
-Currently, the initial prompt is designed to simply explain this system and its underlying technology stack and features.
-
-No other files must be changed to alter chat behavior.
+This string defines how the assistant behaves and what topics it focuses on.
+Modify it to change personality, formatting rules, domain boundaries, or explanation depth—without changing any other part of the app.
 
 ---
 
@@ -171,40 +162,74 @@ No other files must be changed to alter chat behavior.
 
 ### Home Page — `/app/page.tsx`
 
-* Calls `getChats()` (Neon → list of stored chats)
-* Displays them as clickable cards
-* `+ New Chat` creates an ID and redirects to `/[id]`
+* Fetches all chats from Neon
+* Displays each as a clickable card
+* The “+ New Chat” button creates a new chat ID and redirects to `/[id]`
 
 ### Chat Page — `/app/[id]/page.tsx`
 
-* Loads existing messages via `loadChat(id)`
+* Loads stored messages from Neon
 * Hydrates the chat UI
-* Continues the conversation with server-side persistence
+* Lets the user continue chatting with persistence
 
 ### Chat UI — `/ui/chat.tsx`
 
 * Uses `useChat` from `@ai-sdk/react`
-* Streams responses in real time
-* Renders assistant messages with Markdown + syntax highlighting
-* Shows user messages right-aligned, assistant left-aligned
+* Streams responses live
+* Renders markdown assistant messages
+* Renders user messages on the right, assistant on the left
+
+---
+
+## Visual Walkthrough — Application Flow
+
+### **1. Initial Home Page**
+
+The app starts with no chats stored yet.
+
+![Step 1](https://ik.imagekit.io/imagehost2/1.png)
+
+---
+
+### **2. Creating a New Chat**
+
+Click “+ New Chat” to generate a new session ID and enter the chat view.
+
+![Step 2](https://ik.imagekit.io/imagehost2/2.png)
+
+---
+
+### **3. Asking a Question**
+
+The user sends a message, and the AI responds via streaming.
+The entire exchange is saved in Neon.
+
+![Step 3](https://ik.imagekit.io/imagehost2/3.png)
+
+---
+
+### **4. Returning Home — Chat Now Appears**
+
+The new session is now visible on the home page and can be reopened anytime.
+
+![Step 4](https://ik.imagekit.io/imagehost2/4.png)
 
 ---
 
 ## Typical Flow
 
-1. Open the app.
-2. Click **“+ New Chat”** → redirected to `/some-id`.
-3. Chat with streamed responses.
-4. Messages automatically save to Neon.
-5. Return to `/` → the new session appears with a generated title.
-6. Click any chat to resume it.
+1. Open the app
+2. Create a new chat → redirected to `/some-id`
+3. Send messages and receive streamed AI responses
+4. Chat automatically persists to Neon
+5. Return to home → session is listed and clickable
+6. Reopen the chat to continue where you left off
 
 ---
 
 ## Notes
 
-* Chat storage now works reliably in **production** because it uses Neon, not ephemeral filesystem storage.
-* IDs uniquely identify sessions; deleting a row removes a chat.
-* This setup is intentionally minimal and intended as a reference implementation for developers integrating persistence into AI chat applications.
-
+* Storage is fully compatible with Vercel’s serverless architecture
+* Chats are uniquely identified by ID
+* Ideal as a reference implementation for persistent AI chat systems
 
