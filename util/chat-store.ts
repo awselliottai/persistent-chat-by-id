@@ -1,17 +1,35 @@
+// /util/chat-store.ts
+
 import { UIMessage } from 'ai';
 import { generateId } from 'ai';
 import { existsSync, mkdirSync } from 'fs';
 import { readFile, writeFile, readdir, stat } from 'fs/promises';
 import path from 'path';
 
+const isVercel = !!process.env.VERCEL;
+
+/**
+ * Resolve the base directory for chat storage.
+ * - Local dev: project root
+ * - Vercel: /tmp (writable but ephemeral)
+ */
+function getChatDir(): string {
+  const baseDir = isVercel ? '/tmp' : process.cwd();
+  const chatDir = path.join(baseDir, '.chats');
+
+  if (!existsSync(chatDir)) {
+    mkdirSync(chatDir, { recursive: true });
+  }
+
+  return chatDir;
+}
+
 function getChatFile(id: string): string {
   if (!id || typeof id !== 'string') {
     throw new Error(`Invalid chat ID: "${id}"`);
   }
 
-  const chatDir = path.join(process.cwd(), '.chats');
-  if (!existsSync(chatDir)) mkdirSync(chatDir, { recursive: true });
-
+  const chatDir = getChatDir();
   return path.join(chatDir, `${id}.json`);
 }
 
@@ -47,18 +65,15 @@ export async function saveChat({
 export async function getChats(): Promise<
   { id: string; title: string; lastModified: number }[]
 > {
-  const chatDir = path.join(process.cwd(), '.chats');
+  const chatDir = getChatDir();
 
-  if (!existsSync(chatDir)) return [];
-
-  const files = await readdir(chatDir);
+  const files = existsSync(chatDir) ? await readdir(chatDir) : [];
 
   const chatData = await Promise.all(
     files
       .filter((f) => f.endsWith('.json'))
       .map(async (file) => {
         const id = file.replace('.json', '');
-
         const filePath = getChatFile(id);
         const stats = await stat(filePath);
 
@@ -82,11 +97,14 @@ export async function getChats(): Promise<
               }
             }
           }
-        } catch {}
+        } catch {
+          // Ignore corrupt files and fall back to default title
+        }
 
         return { id, title, lastModified: stats.mtimeMs };
       })
   );
 
+  // newest first
   return chatData.sort((a, b) => b.lastModified - a.lastModified);
 }
