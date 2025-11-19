@@ -34,7 +34,7 @@ export default function Chat({
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-screen bg-neutral-950 text-neutral-100">
       <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
         {messages.map((m) => (
           <div
@@ -46,8 +46,8 @@ export default function Chat({
             <div
               className={`max-w-3xl rounded-2xl px-5 py-3 ${
                 m.role === 'user'
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-900 border border-slate-800 text-slate-100 prose prose-invert prose-sm max-w-none'
+                  ? 'bg-neutral-800 text-neutral-50'
+                  : 'bg-neutral-900 border border-neutral-800 text-neutral-100 prose prose-invert prose-sm max-w-none'
               }`}
             >
               {m.role === 'user' ? (
@@ -81,7 +81,7 @@ export default function Chat({
                             </SyntaxHighlighter>
                           ) : (
                             <code
-                              className="bg-slate-800 px-1.5 py-0.5 rounded text-sm font-mono"
+                              className="bg-neutral-800 px-1.5 py-0.5 rounded text-sm font-mono"
                               {...props}
                             >
                               {children}
@@ -102,20 +102,20 @@ export default function Chat({
 
       <form
         onSubmit={handleSubmit}
-        className="fixed bottom-0 left-0 right-0 bg-slate-900/95 border-t border-slate-800 p-4 backdrop-blur"
+        className="fixed bottom-0 left-0 right-0 bg-neutral-900/95 border-t border-neutral-800 p-4 backdrop-blur"
       >
         <div className="max-w-4xl mx-auto flex gap-3">
           <input
-            className="flex-1 px-5 py-3 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            className="flex-1 px-5 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:border-transparent"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask Grok anything..."
+            placeholder="Ask me anything..."
             autoFocus
           />
           <button
             type="submit"
             disabled={!input.trim()}
-            className="px-7 py-3 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="px-7 py-3 bg-neutral-800 text-neutral-100 font-medium rounded-xl hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             Send
           </button>

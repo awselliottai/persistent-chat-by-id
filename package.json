@@ -9,24 +9,20 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@ai-sdk/google": "^2.0.39",
     "@ai-sdk/openai": "^2.0.69",
     "@ai-sdk/react": "^2.0.96",
-    "@google/genai": "^1.30.0",
     "ai": "^5.0.96",
-    "formidable": "^3.5.4",
     "next": "16.0.3",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.0",
     "remark-gfm": "^4.0.1",
-    "uuid": "^13.0.0",
     "zod": "^4.1.12"
+
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/formidable": "^3.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -34,6 +30,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zod": "^4.1.12"
+
   }
 }
