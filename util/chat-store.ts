@@ -5,17 +5,23 @@ import { readFile, writeFile, readdir, stat } from 'fs/promises';
 import path from 'path';
 
 function getChatFile(id: string): string {
+  if (!id || typeof id !== 'string') {
+    throw new Error(`Invalid chat ID: "${id}"`);
+  }
+
   const chatDir = path.join(process.cwd(), '.chats');
   if (!existsSync(chatDir)) mkdirSync(chatDir, { recursive: true });
+
   return path.join(chatDir, `${id}.json`);
 }
 
 export async function createChat(): Promise<string> {
-  // We no longer create an empty file here → file is created only when first response finishes
   return generateId();
 }
 
 export async function loadChat(id: string): Promise<UIMessage[]> {
+  if (!id || typeof id !== 'string') return [];
+
   const filePath = getChatFile(id);
 
   return existsSync(filePath)
@@ -30,6 +36,10 @@ export async function saveChat({
   chatId: string;
   messages: UIMessage[];
 }): Promise<void> {
+  if (!chatId || typeof chatId !== 'string') {
+    throw new Error(`saveChat called without a valid chatId: "${chatId}"`);
+  }
+
   const content = JSON.stringify(messages, null, 2);
   await writeFile(getChatFile(chatId), content);
 }
@@ -48,6 +58,7 @@ export async function getChats(): Promise<
       .filter((f) => f.endsWith('.json'))
       .map(async (file) => {
         const id = file.replace('.json', '');
+
         const filePath = getChatFile(id);
         const stats = await stat(filePath);
 
@@ -71,14 +82,11 @@ export async function getChats(): Promise<
               }
             }
           }
-        } catch (e) {
-          // corrupt file → just show generic title
-        }
+        } catch {}
 
         return { id, title, lastModified: stats.mtimeMs };
       })
   );
 
-  // newest first
   return chatData.sort((a, b) => b.lastModified - a.lastModified);
 }

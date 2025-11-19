@@ -50,14 +50,12 @@ export default function Chat({
               }`}
             >
               {m.role === 'user' ? (
-                // User message — plain text, no markdown
                 <p className="whitespace-pre-wrap">
                   {m.parts
                     .map((p) => (p.type === 'text' ? p.text : ''))
                     .join('')}
                 </p>
               ) : (
-                // AI message — render Markdown with nice code blocks
                 m.parts.map((part, i) => {
                   if (part.type !== 'text') return null;
                   return (
