@@ -1,39 +1,45 @@
-# Chat History by ID — Next.js + Vercel AI SDK
+Here is a clean, concise, updated README rewritten to reflect your new **Neon-backed persistence layer** while preserving the overall structure and tone of the original file.
 
-A minimal Next.js application that lets you:
+---
 
-- Start streamed AI chat sessions
-- Persist each conversation to disk
-- List previous sessions with auto-generated titles
-- Re-open any session by its unique ID and continue chatting
-- Customize the system behavior through a single prompt file
+# Chat History by ID — Next.js + Vercel AI SDK + Neon Postgres
 
-All chat state is stored locally in a `.chats/` folder at the project root, using simple JSON files. 
+A minimal, production-ready example showing how to:
 
+* Start streamed AI chat sessions
+* Store each conversation in a **Neon Postgres database**
+* List all previous chats with auto-generated titles
+* Open any chat by its unique ID and continue the conversation
+* Control system behavior through a single customizable prompt file
 
+Chats are now persisted using **Neon**, giving durable storage across deployments and fully solving the limitations of serverless filesystem writes on Vercel.
 
-This project functions as a sort of minimal buildout example based on the Vercel AI-SDK guidance docs found at https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence.
+This project follows the Vercel AI SDK patterns for message persistence:
+[https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence)
 
 ---
 
 ## Features
 
-- **Streaming AI responses** using the Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`).
-- **Local chat persistence** in `.chats/*.json`.
-- **Session listing page** showing all previous chats with titles derived from the first user message.
-- **Per-chat URL routing** via `/[id]`, so each chat is addressable and reloadable.
-- **Customizable system prompt** in `lib/prompts/system-prompt.ts` so behavior can be easily adapted.
+* **Streaming AI responses** via the Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`).
+* **Persistent chat storage** using **Neon Postgres**, not local disk.
+* **Automatic titles** derived from the first user message.
+* **Session listing** on the home page.
+* **Per-chat routing** using `/[id]` paths.
+* **Configurable system behavior** through `lib/prompts/system-prompt.ts`.
+* **Dark-mode UI** styled with utility classes.
 
 ---
 
 ## Tech Stack
 
-- **Framework:** Next.js (App Router)
-- **Runtime:** Node.js
-- **AI / Streaming:** Vercel AI SDK (`ai`, `@ai-sdk/openai`, `@ai-sdk/react`)
-- **UI:** React, TypeScript
-- **Markdown Rendering:** `react-markdown`, `remark-gfm`, `react-syntax-highlighter`
-- **Styling:** Tailwind-style utility classes via global CSS
+* **Framework:** Next.js (App Router)
+* **Runtime:** Node.js
+* **Database:** Neon Postgres
+* **AI / Streaming:** Vercel AI SDK
+* **UI:** React + TypeScript
+* **Markdown Rendering:** `react-markdown`, `remark-gfm`, `react-syntax-highlighter`
+* **Styling:** Tailwind-style utility classes
 
 ---
 
@@ -41,222 +47,166 @@ This project functions as a sort of minimal buildout example based on the Vercel
 
 ### 1. Prerequisites
 
-- Node.js (LTS recommended)
-- `npm`, `pnpm`, or `yarn`
+* Node.js (LTS)
+* A Neon database (free tier is fine)
 
 ### 2. Clone and install
 
 ```bash
-git clone <your-repo-url>
-cd <your-repo-folder>
+git clone https://github.com/awselliottai/persistent-chat-by-id.git persistent-chat-by-id
+cd persistent-chat-by-id
 
-# choose one
 npm install
-# or
-pnpm install
-# or
-yarn install
-````
+# or pnpm install
+# or yarn install
+```
 
 ### 3. Environment variables
 
-Create a `.env.local` (or `.env`) file at the root of the project and set your OpenAI key:
+Create `.env.local`:
 
 ```bash
 OPENAI_API_KEY=sk-...
+DATABASE_URL=postgresql://<YOUR-NEON-STRING>
 ```
 
-The `@ai-sdk/openai` provider will use this environment variable to authenticate when calling:
+> `DATABASE_URL` should match the connection string provided by Neon.
+> Without `OPENAI_API_KEY`, the chat API cannot generate responses.
 
-```ts
-import { openai } from '@ai-sdk/openai';
+### 4. Create the database table
 
-const model = openai('gpt-4o-mini');
+Run this SQL in the Neon dashboard:
+
+```sql
+CREATE TABLE IF NOT EXISTS chats (
+  id TEXT PRIMARY KEY,
+  messages JSONB NOT NULL,
+  title TEXT NOT NULL,
+  last_modified TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ```
 
-> Without `OPENAI_API_KEY`, the `/api/chat` endpoint will fail.
-
-### 4. Run the dev server
+### 5. Start the dev server
 
 ```bash
 npm run dev
-# or
-pnpm dev
-# or
-yarn dev
+# or pnpm dev
+# or yarn dev
 ```
 
-Then open:
+Visit:
 
-* `http://localhost:3000` in your browser.
+```
+http://localhost:3000
+```
 
 ---
 
 ## How It Works
 
-### Backend — Chat API
+### Chat API — `/app/api/chat/route.ts`
 
-**File:** `/app/api/chat/route.ts`
+The backend endpoint:
 
-* Accepts a JSON body with:
+* Receives `{ messages, id }` from the AI SDK transport
+* Streams a response using `openai('gpt-4o-mini')`
+* Applies `systemPrompt` from `lib/prompts/system-prompt.ts`
+* On stream completion, saves the chat to Neon
 
-  * `messages: UIMessage[]`
-  * `chatId: string`
-* Uses the Vercel AI SDK to:
-
-  * Convert UI messages → model messages
-  * Call `openai('gpt-4o-mini')`
-  * Apply the `systemPrompt` from `lib/prompts/system-prompt.ts`
-  * Stream the response back to the client
-* On stream completion, it calls `saveChat({ chatId, messages })` to persist the chat.
-
-Relevant code:
+Core logic:
 
 ```ts
-import { openai } from '@ai-sdk/openai';
-import { saveChat } from '@/util/chat-store';
-import { convertToModelMessages, streamText, UIMessage } from 'ai';
-import { systemPrompt } from '@/lib/prompts/system-prompt';
+const result = streamText({
+  model: openai('gpt-4o-mini'),
+  messages: convertToModelMessages(messages),
+  system: systemPrompt,
+});
+```
 
-export async function POST(req: Request) {
-  const { messages, chatId }: { messages: UIMessage[]; chatId: string } =
-    await req.json();
+Messages are stored via:
 
-  const result = streamText({
-    model: openai('gpt-4o-mini'),
-    messages: convertToModelMessages(messages),
-    system: systemPrompt,
-  });
-
-  return result.toUIMessageStreamResponse({
-    originalMessages: messages,
-    onFinish: ({ messages }) => {
-      saveChat({ chatId, messages });
-    },
-  });
-}
+```ts
+saveChat({ chatId: id, messages });
 ```
 
 ---
 
-### Chat Persistence
+## Chat Persistence — Neon Storage
 
-**File:** `/util/chat-store.ts`
+Implemented in:
 
-Key responsibilities:
-
-* **`createChat()`**: generates a new ID (using `generateId()` from `ai`) without writing a file yet.
-* **`saveChat({ chatId, messages })`**: writes messages to `.chats/<chatId>.json`.
-* **`loadChat(id)`**: reads `.chats/<id>.json` if it exists, otherwise returns an empty array.
-* **`getChats()`**: scans the `.chats` folder, reads each file, and:
-
-  * Uses the first user message to generate a human-friendly title (truncated to 40 chars).
-  * Sorts results by `lastModified` descending so newest chats appear first.
-
-The `.chats` directory is created automatically if it doesn’t exist.
-
----
-
-### System Prompt Customization
-
-**File:** `/lib/prompts/system-prompt.ts`
-
-```ts
-export const systemPrompt =
-  `You are a helpful assistant who responds to questions concerning the underlying system or architecture as it relates to ChatGPT, the Vercel AI SDK, and the chat streaming capabilities and functionality.`;
+```
+/util/chat-store.ts
 ```
 
-You can freely modify this string to:
+Responsibilities:
 
-* Change the assistant’s personality
-* Restrict or expand its domain
-* Adjust formatting or output style
+* `createChat()` → generates a new unique chat ID
+* `saveChat()` → upserts messages into Neon
+* `loadChat(id)` → fetches stored history for that chat
+* `getChats()` → returns all chats, sorted by `last_modified`
+* Titles are extracted from the first user message and truncated to 40 characters
 
-This is the main place for altering how the AI responds without touching the rest of the app.
-
----
-
-## Frontend / UI Flow
-
-### 1. Home Page — listing chat sessions
-
-**File:** `/app/page.tsx`
-
-* Loads all chats with `getChats()`.
-* Displays a grid of cards:
-
-  * Title derived from the first user message.
-  * Timestamp (last modified).
-* Provides a `+ New Chat` button:
-
-  * Calls `createChat()` on the server.
-  * Redirects to `/[id]` for that new chat.
-
-URL: `/`
-Purpose: overview of all stored sessions.
+This storage replaces the previous `.chats` filesystem directory, which is not suitable for Vercel serverless environments.
 
 ---
 
-### 2. Chat Page — per-session chat by ID
+## System Prompt Customization
 
-**File:** `/app/[id]/page.tsx`
+Location:
 
-* Receives `id` from route params.
-* Uses `loadChat(id)` to hydrate `initialMessages`.
-* Renders the `Chat` component with this `id` and the loaded messages.
-* Includes a simple “Back to all chats” header link.
+```
+/lib/prompts/system-prompt.ts
+```
 
-URL pattern: `/:id`
-Purpose: view + continue an existing chat.
+This file defines the assistant's behavior. Modify the string to:
 
----
+* Change personality
+* Restrict or expand the domain
+* Adjust formatting or voice
 
-### 3. Chat Component — streaming UI
-
-**File:** `/ui/chat.tsx`
-
-* Uses `useChat` from `@ai-sdk/react` with:
-
-  * `id` (the same `chatId` used for persistence)
-  * `initialMessages` (loaded from disk)
-  * `DefaultChatTransport` to point at `/api/chat`
-* Renders:
-
-  * User messages as right-aligned bubbles.
-  * Assistant messages as left-aligned bubbles with Markdown rendering.
-  * Code blocks with syntax highlighting via `react-syntax-highlighter` and `remark-gfm`.
-* Includes a fixed bottom input bar for sending new messages.
+No other files must be changed to alter chat behavior.
 
 ---
 
-## Typical Usage
+## Frontend Overview
 
-1. **Start the dev server** and open `http://localhost:3000`.
-2. Click **“+ New Chat”**:
+### Home Page — `/app/page.tsx`
 
-   * A new chat ID is created.
-   * You are redirected to `/:id`.
-3. Type a question in the input box and hit **Enter** (or click **Send**):
+* Calls `getChats()` (Neon → list of stored chats)
+* Displays them as clickable cards
+* `+ New Chat` creates an ID and redirects to `/[id]`
 
-   * Messages stream in from the backend.
-   * At the end of the stream, the conversation is saved to `.chats/<id>.json`.
-4. Go back to `/`:
+### Chat Page — `/app/[id]/page.tsx`
 
-   * The new chat appears in the list with a title derived from your first message.
-5. Click any chat card:
+* Loads existing messages via `loadChat(id)`
+* Hydrates the chat UI
+* Continues the conversation with server-side persistence
 
-   * You’re taken to `/:id` for that chat.
-   * Previous history is loaded, and you can continue the conversation.
+### Chat UI — `/ui/chat.tsx`
 
+* Uses `useChat` from `@ai-sdk/react`
+* Streams responses in real time
+* Renders assistant messages with Markdown + syntax highlighting
+* Shows user messages right-aligned, assistant left-aligned
+
+---
+
+## Typical Flow
+
+1. Open the app.
+2. Click **“+ New Chat”** → redirected to `/some-id`.
+3. Chat with streamed responses.
+4. Messages automatically save to Neon.
+5. Return to `/` → the new session appears with a generated title.
+6. Click any chat to resume it.
 
 ---
 
-## Notes & Limitations
+## Notes
 
-* Storage is **local** and **file-based** (`.chats/`). For production use, consider replacing this with a database.
-* Session persistence is tied to the `chatId`. If you change IDs or delete files manually, corresponding sessions will disappear from the UI.
-* The application focuses on **streaming chat** and **retrieval by ID**, not on user auth, multi-user separation, or access control.
-
----
+* Chat storage now works reliably in **production** because it uses Neon, not ephemeral filesystem storage.
+* IDs uniquely identify sessions; deleting a row removes a chat.
+* This setup is intentionally minimal and intended as a reference implementation for developers integrating persistence into AI chat applications.
 
 

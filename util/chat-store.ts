@@ -1,36 +1,26 @@
-// /util/chat-store.ts
-
 import { UIMessage } from 'ai';
 import { generateId } from 'ai';
-import { existsSync, mkdirSync } from 'fs';
-import { readFile, writeFile, readdir, stat } from 'fs/promises';
-import path from 'path';
+import { sql } from '@/lib/db';
 
-const isVercel = !!process.env.VERCEL;
+type ChatRow = {
+  id: string;
+  title: string;
+  last_modified: string;
+};
 
-/**
- * Resolve the base directory for chat storage.
- * - Local dev: project root
- * - Vercel: /tmp (writable but ephemeral)
- */
-function getChatDir(): string {
-  const baseDir = isVercel ? '/tmp' : process.cwd();
-  const chatDir = path.join(baseDir, '.chats');
+function deriveTitle(messages: UIMessage[]): string {
+  let title = 'New Chat';
 
-  if (!existsSync(chatDir)) {
-    mkdirSync(chatDir, { recursive: true });
+  const firstUserMsg = messages.find((m) => m.role === 'user');
+  if (firstUserMsg) {
+    const textPart = firstUserMsg.parts.find((p) => p.type === 'text');
+    if (textPart?.text) {
+      const text = textPart.text.trim();
+      title = text.length > 40 ? text.slice(0, 40) + '...' : text;
+    }
   }
 
-  return chatDir;
-}
-
-function getChatFile(id: string): string {
-  if (!id || typeof id !== 'string') {
-    throw new Error(`Invalid chat ID: "${id}"`);
-  }
-
-  const chatDir = getChatDir();
-  return path.join(chatDir, `${id}.json`);
+  return title;
 }
 
 export async function createChat(): Promise<string> {
@@ -40,11 +30,29 @@ export async function createChat(): Promise<string> {
 export async function loadChat(id: string): Promise<UIMessage[]> {
   if (!id || typeof id !== 'string') return [];
 
-  const filePath = getChatFile(id);
+  const rows = await sql`
+    SELECT messages
+    FROM chats
+    WHERE id = ${id}
+  `;
 
-  return existsSync(filePath)
-    ? JSON.parse(await readFile(filePath, 'utf8'))
-    : [];
+  if (rows.length === 0) return [];
+
+  const row = rows[0] as { messages: unknown };
+  const raw = row.messages;
+
+  if (!raw) return [];
+
+  // If driver returns the JSON string, parse it; if it returns an object/array, just return it.
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw) as UIMessage[];
+    } catch {
+      return [];
+    }
+  }
+
+  return raw as UIMessage[];
 }
 
 export async function saveChat({
@@ -54,57 +62,38 @@ export async function saveChat({
   chatId: string;
   messages: UIMessage[];
 }): Promise<void> {
-  if (!chatId || typeof chatId !== 'string') {
+  if (!chatId) {
     throw new Error(`saveChat called without a valid chatId: "${chatId}"`);
   }
 
-  const content = JSON.stringify(messages, null, 2);
-  await writeFile(getChatFile(chatId), content);
+  const title = deriveTitle(messages);
+  const messagesJson = JSON.stringify(messages); // ✅ valid JSON text
+
+  await sql`
+    INSERT INTO chats (id, messages, title, last_modified)
+    VALUES (${chatId}, ${messagesJson}, ${title}, NOW())
+    ON CONFLICT (id)
+    DO UPDATE SET
+      messages = EXCLUDED.messages,
+      title = EXCLUDED.title,
+      last_modified = EXCLUDED.last_modified;
+  `;
 }
 
 export async function getChats(): Promise<
   { id: string; title: string; lastModified: number }[]
 > {
-  const chatDir = getChatDir();
+  // ❌ sql<ChatRow[]>`...`  (not allowed)
+  // ❌ Cannot apply type arguments to neon client
+  const rows = await sql`
+    SELECT id, title, last_modified
+    FROM chats
+    ORDER BY last_modified DESC
+  `;
 
-  const files = existsSync(chatDir) ? await readdir(chatDir) : [];
-
-  const chatData = await Promise.all(
-    files
-      .filter((f) => f.endsWith('.json'))
-      .map(async (file) => {
-        const id = file.replace('.json', '');
-        const filePath = getChatFile(id);
-        const stats = await stat(filePath);
-
-        let title = 'New Chat';
-
-        try {
-          const messages: UIMessage[] = JSON.parse(
-            await readFile(filePath, 'utf8')
-          );
-
-          if (messages.length > 0) {
-            const firstUserMsg = messages.find((m) => m.role === 'user');
-            if (firstUserMsg) {
-              const textPart = firstUserMsg.parts.find(
-                (p) => p.type === 'text'
-              );
-              if (textPart?.text) {
-                const text = textPart.text.trim();
-                title =
-                  text.length > 40 ? text.slice(0, 40) + '...' : text;
-              }
-            }
-          }
-        } catch {
-          // Ignore corrupt files and fall back to default title
-        }
-
-        return { id, title, lastModified: stats.mtimeMs };
-      })
-  );
-
-  // newest first
-  return chatData.sort((a, b) => b.lastModified - a.lastModified);
+  return (rows as ChatRow[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    lastModified: new Date(row.last_modified).getTime(),
+  }));
 }
