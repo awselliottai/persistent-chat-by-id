@@ -1,7 +1,3 @@
-Here is a clean, concise, updated README rewritten to reflect your new **Neon-backed persistence layer** while preserving the overall structure and tone of the original file.
-
----
-
 # Chat History by ID — Next.js + Vercel AI SDK + Neon Postgres
 
 A minimal, production-ready example showing how to:
